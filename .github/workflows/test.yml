@@ -1,9 +1,7 @@
-name: Build Kernel (Android 9)
+name: Build Kernel (fix mrproper + dtc)
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -13,56 +11,38 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - name: Checkout kernel source
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential bc bison flex libssl-dev \
-            libncurses5-dev libncursesw5-dev dwarves git
+            libncurses5-dev libncursesw5-dev dwarves \
+            device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Fetch Android GCC 4.9 toolchains (arm64 + arm32)
+      # Clean the source tree to satisfy Kbuild sanity checks
+      - name: Kernel mrproper (source root)
         run: |
-          set -e
-          mkdir -p toolchains
-          # ARM64 (Android Pie-era prebuilts)
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 toolchains/aarch64-4.9
-          cd toolchains/aarch64-4.9
-          # Use a known ref containing binaries; Android 9 tags exist in this repo
-          git checkout android-9.0.0_r61 || git rev-parse HEAD
-          cd ../../
-          # ARM32 companion (often required by arm64 kernels)
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 toolchains/arm32-4.9
-          cd toolchains/arm32-4.9
-          git checkout android-9.0.0_r61 || git rev-parse HEAD
-          cd ../../
-          echo "$GITHUB_WORKSPACE/toolchains/aarch64-4.9/bin" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/toolchains/arm32-4.9/bin"   >> $GITHUB_PATH
+          make mrproper
 
-      - name: Print compiler versions
-        run: |
-          aarch64-linux-android-gcc --version || true
-          arm-linux-androideabi-gcc --version || true
-
-      - name: Configure (ARM64, Pie)
+      - name: Configure (ARM64)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export ANDROID_MAJOR_VERSION=p
-          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/aarch64-4.9/bin/aarch64-linux-android-"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/arm32-4.9/bin/arm-linux-androideabi-"
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           make O=out on7xreflte_01_defconfig
 
+      # Build using the system dtc to avoid yylloc conflicts
       - name: Build
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export ANDROID_MAJOR_VERSION=p
-          export CROSS_COMPILE="$GITHUB_WORKSPACE/toolchains/aarch64-4.9/bin/aarch64-linux-android-"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/toolchains/arm32-4.9/bin/arm-linux-androideabi-"
-          make O=out -j"$(nproc)"
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          make O=out DTC=dtc -j"$(nproc)"
           ls -al out/arch/arm64/boot || true
 
       - name: Upload artifacts
