@@ -1,10 +1,20 @@
-name: Build Kernel (fix mrproper + dtc)
+name: Build Kernel (mrproper + noninteractive + system-dtc)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      android_major:
+        description: "Android major version (p=Android 9, r=Android 11)"
+        required: false
+        default: "p"
+      defconfig:
+        description: "Kernel defconfig under arch/arm64/configs"
+        required: false
+        default: "on7xreflte_01_defconfig"
 
+# Prevent new pushes from canceling an in-progress run for the same ref
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -23,28 +33,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential bc bison flex libssl-dev \
-            libncurses5-dev libncursesw5-dev dwarves \
-            device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+            libncurses5-dev libncursesw5-dev dwarves git \
+            device-tree-compiler \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
+      # Run at repository root (no O=) to completely clean generated files
       - name: Kernel mrproper (source root)
         run: |
           make mrproper
 
-      - name: Configure (ARM64)
+      - name: Configure (ARM64, non-interactive)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+          export ANDROID_MAJOR_VERSION="${{ github.event.inputs.android_major }}"
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          make O=out on7xreflte_01_defconfig
+          make O=out "${{ github.event.inputs.defconfig }}"
+          # Accept defaults for any new Kconfig symbols without prompting
           make O=out olddefconfig
 
       - name: Build (use system dtc + -fcommon for host tools)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+          export ANDROID_MAJOR_VERSION="${{ github.event.inputs.android_major }}"
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          # DTC=dtc uses the system device-tree-compiler instead of in-tree dtc
+          # HOSTCFLAGS="-fcommon" avoids yylloc multiple-definition on old dtc
           make O=out DTC=dtc HOSTCFLAGS="-fcommon" -j"$(nproc)"
           ls -al out/arch/arm64/boot || true
 
