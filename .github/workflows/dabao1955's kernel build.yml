@@ -13,7 +13,7 @@ jobs:
       - name: Build
         uses: dabao1955/kernel_build_action@main
         with:
-          kernel-url: https://github.com/YOUR_USERNAME/android_kernel_samsung_g611f
+          kernel-url: https://github.com/aum47/android_kernel_samsung_g611f
           kernel-branch: main
           config: exynos7870-g611f_defconfig
           arch: arm64
