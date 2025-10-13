@@ -14,7 +14,6 @@ on:
         required: false
         default: "on7xreflte_01_defconfig"
 
-# Prevent new pushes from canceling an in-progress run for the same ref
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -23,6 +22,11 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
+
+    # Provide safe defaults even on 'push' (where workflow_dispatch defaults don't apply)
+    env:
+      DEFCONFIG: ${{ github.event.inputs.defconfig || 'on7xreflte_01_defconfig' }}
+      ANDROID_MAJOR: ${{ github.event.inputs.android_major || 'p' }}
 
     steps:
       - name: Checkout
@@ -36,34 +40,34 @@ jobs:
             libncurses5-dev libncursesw5-dev dwarves git \
             device-tree-compiler \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+        # GNU make needs valid file/target arguments; empty values can cause "empty string invalid as file name" errors, so we ensure defaults above. [web:333][web:331]
 
-      # Run at repository root (no O=) to completely clean generated files
       - name: Kernel mrproper (source root)
         run: |
           make mrproper
+        # mrproper fully cleans generated files before an out-of-tree build per Kbuild expectations. [web:203][web:195]
 
       - name: Configure (ARM64, non-interactive)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export ANDROID_MAJOR_VERSION="${{ github.event.inputs.android_major }}"
+          export ANDROID_MAJOR_VERSION="${ANDROID_MAJOR}"
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          make O=out "${{ github.event.inputs.defconfig }}"
-          # Accept defaults for any new Kconfig symbols without prompting
+          make O=out "${DEFCONFIG}"
           make O=out olddefconfig
+        # olddefconfig finalizes any new symbols without prompts, keeping CI non-interactive. [web:285][web:321]
 
       - name: Build (use system dtc + -fcommon for host tools)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export ANDROID_MAJOR_VERSION="${{ github.event.inputs.android_major }}"
+          export ANDROID_MAJOR_VERSION="${ANDROID_MAJOR}"
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          # DTC=dtc uses the system device-tree-compiler instead of in-tree dtc
-          # HOSTCFLAGS="-fcommon" avoids yylloc multiple-definition on old dtc
           make O=out DTC=dtc HOSTCFLAGS="-fcommon" -j"$(nproc)"
           ls -al out/arch/arm64/boot || true
+        # For older in-tree dtc, -fcommon avoids the yylloc duplicate symbol with modern toolchains; using DTC=dtc selects the system device-tree-compiler. [web:314][web:315][web:222]
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
