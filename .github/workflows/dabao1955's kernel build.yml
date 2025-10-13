@@ -15,12 +15,12 @@ jobs:
         with:
           kernel-url: https://github.com/aum47/android_kernel_samsung_g611f
           kernel-branch: main
-          config: exynos7870-g611f_defconfig
+          config: on7xreflte_01_defconfig
           arch: arm64
           aosp-gcc: true
           aosp-clang: true
-          android-version: 9
-          aosp-clang-version: r353983
+          android-version: 11
+          aosp-clang-version: r383902
           anykernel3: true
           release: true
           access-token: ${{ secrets.GITHUB_TOKEN }}
