@@ -1,0 +1,39 @@
+name: Build Kernel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v3
+
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential bc libncurses5-dev bison flex libssl-dev
+
+    - name: Set up environment variables
+      run: |
+        export ARCH=arm
+        export CROSS_COMPILE=arm-linux-androideabi-
+        # If you use a specific cross-compiler, install and set its path here
+
+    - name: Build Kernel
+      run: |
+        make on7xreflte_defconfig
+        make -j$(nproc)
+
+    - name: Upload Kernel Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: kernel-build
+        path: |
+          arch/arm/boot/zImage
+          arch/arm/boot/dts/*.dtb
