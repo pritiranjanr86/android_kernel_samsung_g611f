@@ -30,7 +30,7 @@ jobs:
         export SUBARCH=arm64
         export CROSS_COMPILE=~/toolchains/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
         mkdir -p out
-        make O=out g611f_defconfig || make O=out exynos7870_defconfig
+        make O=out on7xreflte_01_defconfig || make O=out on7xreflte_01_defconfig
         make O=out -j$(nproc) zImage dtbs
 
     - name: Pack boot.img
