@@ -1,0 +1,53 @@
+name: Build On7xreflte Kernel
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v4
+
+    - name: Set up Toolchain
+      run: |
+        sudo apt update
+        sudo apt install -y bc bison flex libssl-dev make libc6-dev libncurses5-dev \
+          libncursesw5-dev libelf-dev ccache wget curl unzip git python3
+        mkdir -p ~/toolchains
+        cd ~/toolchains
+        wget https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+        tar -xf gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+        echo "Toolchain ready"
+
+    - name: Configure and Build Kernel
+      run: |
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CROSS_COMPILE=~/toolchains/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+        mkdir -p out
+        make O=out g611f_defconfig || make O=out exynos7870_defconfig
+        make O=out -j$(nproc) zImage dtbs
+
+    - name: Pack boot.img
+      run: |
+        cd ~
+        git clone https://github.com/osm0sis/Android-Image-Kitchen.git AIK
+        cd AIK
+        chmod +x *.sh
+        cp $GITHUB_WORKSPACE/tools/boot.img ./
+        ./unpackimg.sh boot.img
+        cp $GITHUB_WORKSPACE/out/arch/arm64/boot/zImage ./split_img/boot.img-zImage
+        cat $GITHUB_WORKSPACE/out/arch/arm64/boot/dts/samsung/*.dtb >> ./split_img/boot.img-zImage
+        ./repackimg.sh
+        mv image-new.img $GITHUB_WORKSPACE/new-boot.img
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: new-boot-img
+        path: new-boot.img
